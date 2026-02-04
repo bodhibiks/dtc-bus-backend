@@ -1,47 +1,37 @@
 import express from "express";
 import fetch from "node-fetch";
-import * as cheerio from "cheerio";
+import GtfsRealtimeBindings from "gtfs-realtime-bindings";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Your route
-const ROUTE_ID = "548CLUP";
-const URL = `https://businfo.dimts.in/businfo/Bus_info/EtaByRoute.aspx?ID=${ROUTE_ID}`;
+const API_KEY = "S7BjFT1yXFCDCiR62hCxxpmI3igE9XO2";
+const VEHICLE_FEED = `https://otd.delhi.gov.in/api/realtime/VehiclePositions.pb?api_key=${API_KEY}`;
 
 app.get("/", async (req, res) => {
   try {
-    const response = await fetch(URL, {
-      headers: {
-        "User-Agent": "Mozilla/5.0",
-        "Accept": "text/html"
-      }
-    });
+    const response = await fetch(VEHICLE_FEED);
+    const buffer = await response.arrayBuffer();
+    const feed = GtfsRealtimeBindings.transit_realtime.FeedMessage.decode(new Uint8Array(buffer));
 
-    const html = await response.text();
-    const $ = cheerio.load(html);
+    const routeId = "548CLUP";
 
-    let results = [];
+    const vehicles = feed.entity
+      .filter(e => e.vehicle && e.vehicle.trip && e.vehicle.trip.routeId === routeId)
+      .map(e => e.vehicle);
 
-    // Try to extract stop names and times from table rows
-    $("tr").each((i, el) => {
-      const tds = $(el).find("td");
-      if (tds.length >= 2) {
-        const stop = $(tds[0]).text().trim();
-        const time = $(tds[1]).text().trim();
-        if (stop && time) {
-          results.push({ stop, time });
-        }
-      }
-    });
-
-    if (results.length === 0) {
-      return res.json({ error: "No ETA data found. Page structure may have changed." });
+    if (vehicles.length === 0) {
+      return res.json({ error: "No live buses found on this route right now." });
     }
 
+    const bus = vehicles[0];
+
     res.json({
-      route: ROUTE_ID,
-      eta: results
+      route: routeId,
+      vehicle_id: bus.vehicle?.id || "unknown",
+      latitude: bus.position.latitude,
+      longitude: bus.position.longitude,
+      timestamp: bus.timestamp
     });
 
   } catch (err) {
