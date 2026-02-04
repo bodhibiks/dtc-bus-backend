@@ -1,40 +1,47 @@
 import express from "express";
 import fetch from "node-fetch";
-import GtfsRealtimeBindings from "gtfs-realtime-bindings";
+import cheerio from "cheerio";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const API_KEY = "S7BjFT1yXFCDCiR62hCxxpmI3igE9XO2";
-const FEED_URL = `https://otd.delhi.gov.in/api/realtime/TripUpdates.pb?api_key=${API_KEY}`;
+// Your route
+const ROUTE_ID = "548CLUP";
+const URL = `https://businfo.dimts.in/businfo/Bus_info/EtaByRoute.aspx?ID=${ROUTE_ID}`;
 
 app.get("/", async (req, res) => {
   try {
-    const response = await fetch(FEED_URL);
-    const buffer = await response.arrayBuffer();
-    const feed = GtfsRealtimeBindings.transit_realtime.FeedMessage.decode(new Uint8Array(buffer));
+    const response = await fetch(URL, {
+      headers: {
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "text/html"
+      }
+    });
 
-    // Filter for route 548CLUP
-    const routeId = "548CLUP";
+    const html = await response.text();
+    const $ = cheerio.load(html);
 
-    const trips = feed.entity
-      .filter(e => e.tripUpdate && e.tripUpdate.trip.routeId === routeId)
-      .map(e => e.tripUpdate);
+    let results = [];
 
-    if (trips.length === 0) {
-      return res.json({ error: "No live data for this route right now." });
+    // Try to extract stop names and times from table rows
+    $("tr").each((i, el) => {
+      const tds = $(el).find("td");
+      if (tds.length >= 2) {
+        const stop = $(tds[0]).text().trim();
+        const time = $(tds[1]).text().trim();
+        if (stop && time) {
+          results.push({ stop, time });
+        }
+      }
+    });
+
+    if (results.length === 0) {
+      return res.json({ error: "No ETA data found. Page structure may have changed." });
     }
 
-    const trip = trips[0];
-
-    const stopTimes = trip.stopTimeUpdate.map(stu => ({
-      stop_id: stu.stopId,
-      arrival_time: stu.arrival?.time ? new Date(stu.arrival.time * 1000).toLocaleTimeString() : null
-    }));
-
     res.json({
-      route: routeId,
-      stops: stopTimes
+      route: ROUTE_ID,
+      eta: results
     });
 
   } catch (err) {
