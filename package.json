@@ -3,12 +3,13 @@
   "version": "1.0.0",
   "description": "Backend for Delhi DTC bus ETA",
   "main": "index.js",
+  "type": "module",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-  "express": "^4.18.2",
-  "node-fetch": "^3.3.2",
-  "cheerio": "^1.0.0-rc.12"
+    "express": "^4.18.2",
+    "node-fetch": "^3.3.2",
+    "cheerio": "^1.0.0-rc.12"
+  }
 }
-
